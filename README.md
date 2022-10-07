@@ -1,6 +1,6 @@
 # Text_Mining_Epilepsy_Outcomes
 
-# We're working on making the code presentable!
+This code is for <insert_citation_here>. 
 
 # Abbreviations found in documentation/code
 
