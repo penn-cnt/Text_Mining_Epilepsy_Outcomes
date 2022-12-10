@@ -17,7 +17,8 @@ with open(r'all_patients_and_visits_outcome_measures_py38.pkl', 'rb') as f:
     
 #load the raw data and find the new patient visits
 epileptologist_notes = pd.read_pickle('<PATH_TO_NOTES>')
-new_patient_notes = epileptologist_notes.loc[epileptologist_notes['VISIT_TYPE'] == 'NEW PATIENT VISIT']
+epileptologist_notes['VISIT_TYPE'] = epileptologist_notes['VISIT_TYPE'].fillna("NULL")
+new_patient_notes = epileptologist_notes.loc[epileptologist_notes['VISIT_TYPE'].str.contains('NEW PATIENT') & (~epileptologist_notes['VISIT_TYPE'].str.contains('GI'))]
 new_patient_note_ids = list(new_patient_notes['NOTE_ID'])
     
 #aggregate patients and visit predictions

@@ -1267,9 +1267,9 @@ def generate_markovian_pat_history_survival_curve(agg_pats, history_months=6, su
     #create a survival plot
     if not no_plot:
         fig=plt.figure(figsize = (6,6))
-        plt.title(f"Seizure Free Visits for Patients with\n{history_months} Months of Prior History And at least {survival_cutoff_years} Years of Data Afterwards.")
-        plt.plot(1-hasSz_start_survival['szFree'], c='#d95f02')
-        plt.xlabel(f"Years After {history_months} Months of History")
+        plt.title(f"Time Until a Seizure Free Period\nfor Non-Seizure Free Patients")
+        plt.plot(1-hasSz_start_survival['szFree'], c='#ffc20a')
+        plt.xlabel(f"Years After {history_months}+ Months Not Seizure Free")
         plt.ylabel("Probability of a Seizure Free Visit")
         plt.legend([f"n={hasSz_start_survival.loc[0, 'num_pats']}"])
         plt.xlim([0, plot_xlim_years])
@@ -1283,9 +1283,9 @@ def generate_markovian_pat_history_survival_curve(agg_pats, history_months=6, su
             plt.show()
             
         fig=plt.figure(figsize = (6,6))
-        plt.title(f"Breakthrough Seizures For Patients with\n{history_months} Months of Prior History And at least {survival_cutoff_years} Years of Data Afterwards.")
-        plt.plot(1-szFree_start_survival['szFree'], c='#1b9e77')
-        plt.xlabel(f"Years After {history_months} Months of History")
+        plt.title(f"Time Until a Breakthrough Seizure\nfor Seizure Free Patients")
+        plt.plot(1-szFree_start_survival['szFree'], c='#0066cc')
+        plt.xlabel(f"Years After {history_months}+ Months Seizure Free")
         plt.ylabel("Probability of a Breakthrough Seizure")
         plt.legend([f"n={szFree_start_survival.loc[0, 'num_pats']}"])
         plt.xlim([0, plot_xlim_years])

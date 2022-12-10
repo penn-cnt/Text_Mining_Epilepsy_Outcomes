@@ -26,8 +26,6 @@ with open(r'all_patients_and_visits_outcome_measures_py38.pkl', 'rb') as f:
     
 #load the raw text data
 epileptologist_notes = pd.read_pickle('<PATH_TO_NOTES>')
-#minimum date allowed.
-date_cutoff = datetime.strptime('01-01-2005', '%m-%d-%Y')
 #remove duplicate notes
 epileptologist_notes = epileptologist_notes.drop_duplicates(subset=['NOTE_AUTHOR', 'VISIT_DATE', 'NOTE_ID'], keep='first')
 
@@ -339,7 +337,7 @@ def plot_visit_dates_and_hasSz(min_frac_hasSz = 0.0, max_frac_hasSz = 1.0,
                                title="All Patients", use_delta=False, 
                                split_by_proportions=None, split_amount=50, ylabel='Patient Index',
                                xlabel='Date', no_y_ticks=False, save_path='Fig_2'):
-    colors = ['#1b9e77', '#d95f02', '#7570b3']
+    colors = ['#0066cc', '#ffc20a', '#7570b3']
     fig = plt.figure(figsize=(12, 12))
     num_pats = 0
     num_visits = 0

@@ -14,9 +14,6 @@ from timeline_utils import Visit, sort_by_visit_date, Patient, generate_aggregat
 with open(r'all_patients_and_visits_outcome_measures_py38', 'rb') as f:
     datapull = pickle.load(f)
 
-#minimum date allowed.
-date_cutoff = datetime.strptime('01-01-2005', '%m-%d-%Y')
-
 #we're considering all patients
 min_num_visits = 1
 
@@ -64,7 +61,7 @@ for MRN in plurality_voting_tbl.index:
                     contradictory_agg_visits_elo.append({'current_visit': plurality_voting_tbl.loc[MRN,vis], 'previous_visit': previous_visit})
                     contradictory_elos.append(plurality_voting_tbl.loc[MRN,vis].elo)
 
-                previous_visit = plurality_voting_tbl.loc[MRN,vis]
+            previous_visit = plurality_voting_tbl.loc[MRN,vis]
         else:
             previous_visit = plurality_voting_tbl.loc[MRN,vis]
 print(f"Number of visits where ELO contradicts seizure freedom: {len(contradictory_agg_visits_elo)}")
