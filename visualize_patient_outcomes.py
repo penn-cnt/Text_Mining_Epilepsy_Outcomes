@@ -69,6 +69,12 @@ five_visits_or_more = [num_vis if num_vis >= 5 else 0 for num_vis in num_visits_
 print(f"Number of visits from patients with at least 5 visits: {np.sum(five_visits_or_more)}")
 np.sum(np.array(num_visits_per_pat[2]) >= 5) / len(num_visits_per_pat[2])
 
+#get info for over 1 visit specifically
+print(f"Number of patients with at least {1} visit: {np.sum(np.array(num_visits_per_pat[2]) > 1)}")
+one_visits_or_more = [num_vis if num_vis > 1 else 0 for num_vis in num_visits_per_pat[2]]
+print(f"Number of visits from patients with at least 1 visit: {np.sum(one_visits_or_more)}")
+np.sum(np.array(num_visits_per_pat[2]) > 1) / len(num_visits_per_pat[2])
+
 #number of visits distribution
 print(f"Mean number of visits per patient: {np.mean(num_visits_per_pat[2])}")
 print(f"Median number of visits per patient: {np.median(num_visits_per_pat[2])}")
