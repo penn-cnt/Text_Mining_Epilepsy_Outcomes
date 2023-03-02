@@ -18,6 +18,106 @@ def isFloat(string):
         return True
     except:
         return False
+    
+def pqf_exists(value):
+    if isinstance(value,str) or pd.isnull(value):
+        return False
+    else:
+        return value >= 0
+    
+def elo_exists(value):
+    """elos tend to be either datetime.datetime, a float, or a unprocessed string. The float is invalid"""
+    return isinstance(value, str) or isinstance(value, datetime)
+
+def dict_to_pingouin(metric_dict):
+    #format ELOs into the pingouin table
+    #ICC in pingouin needs numeric values. Thus, we can calculate dates as the number of days the ELO was to TODAY
+    elo_pg = [{'note_idx':i, 'rater':'ensemble', 'elo':(metric_dict['elo_predictions'][i] - datetime.now()).days} for i in range(len(metric_dict['elo_predictions']))]
+    elo_pg = elo_pg + [{'note_idx':i, 'rater':'ground_truth', 'elo':(metric_dict['elo_truths'][i] - datetime.now()).days} for i in range(len(metric_dict['elo_truths']))]
+    
+    #format pqfs into the pingouin table
+    pqf_pg = [{'note_idx':i, 'rater':'ensemble', 'pqf':metric_dict['pqf_predictions'][i]} for i in range(len(metric_dict['pqf_predictions']))]
+    pqf_pg = pqf_pg + [{'note_idx':i, 'rater':'ground_truth', 'pqf':metric_dict['pqf_truths'][i]} for i in range(len(metric_dict['pqf_truths']))]
+    
+    return pd.DataFrame(pqf_pg), pd.DataFrame(elo_pg)
+
+def calculate_metrics_for_individuals(ground_truth_quantities, all_preditions_and_summaries):
+    #go through each annotator's quantities and calculate their metrics
+    individual_metrics = {}
+    for annotator in all_preditions_and_summaries:
+        individual_metrics[annotator] = {'pqf_classification_predictions':[],
+                                        'elo_classification_predictions':[],
+                                        'pqf_classification_truths':[],
+                                        'elo_classification_truths':[],
+                                        'pqf_predictions':[],
+                                        'pqf_truths':[],
+                                        'elo_predictions':[],
+                                        'elo_truths':[]
+                                        }
+
+        #for each annotation from this annotator
+        for idx, row in all_preditions_and_summaries[annotator].iterrows():
+
+            #get the ground truth for this index
+            ground_truth = ground_truth_quantities.loc[int(idx), 'all_answers']
+
+            #check if it's a pqf question
+            if 'pqf' in row['id']:
+
+                #for pqfs, check if the ground_truths exist, or if it is all < 0 (error codes while quantifying) and/or string (could not be quantified)
+                ground_truth_exists = np.any([pqf_exists(truth) for truth in ground_truth]) if isinstance(ground_truth, list) else not pd.isnull(ground_truth)
+
+                #append whether or not an answer exists to the classification truths
+                individual_metrics[annotator]['pqf_classification_truths'].append(ground_truth_exists)
+
+                #was a prediction made?
+                prediction_exists = pqf_exists(row['sz_per_month'])
+
+                #append whether or not a prediction was made
+                individual_metrics[annotator]['pqf_classification_predictions'].append(prediction_exists)
+
+                #if a prediction was made and the ground truth exists, store the best answer.
+                #store the lowest abs error if there are multiple ground_truths
+                if prediction_exists and ground_truth_exists:
+                    ground_truth = [truth for truth in ground_truth if pqf_exists(truth)]
+                    best_ground_truth_idx = np.argmin([np.abs(truth - row['sz_per_month']) for truth in ground_truth])                  
+                    individual_metrics[annotator]['pqf_predictions'].append(row['sz_per_month'])
+                    individual_metrics[annotator]['pqf_truths'].append(ground_truth[best_ground_truth_idx])
+
+            #otherwise it's an elo question
+            else:
+
+                #first, check if the ground truth exists
+                ground_truth_exists = np.any([elo_exists(truth) for truth in ground_truth]) if isinstance(ground_truth, list) else not pd.isnull(ground_truth)
+
+                #append whether or not an answer exists to the classification truths
+                individual_metrics[annotator]['elo_classification_truths'].append(ground_truth_exists)
+
+                #was a prediction made?
+                prediction_exists = elo_exists(row['last_occurrence'])
+
+                #append whether or not a prediction was made
+                individual_metrics[annotator]['elo_classification_predictions'].append(prediction_exists)
+
+
+                #if a prediction was made and the ground truth exists, store the best answer.
+                #store the lowest abs error if there are multiple ground_truths
+                if prediction_exists and ground_truth_exists:
+                    #first, convert ground_truth to datetimes
+                    ground_truth = [datetime.strptime(gt, '%B %d %Y') for gt in ground_truth]
+                    best_ground_truth_idx = np.argmin([np.abs((truth - row['last_occurrence']).days) for truth in ground_truth])
+                    individual_metrics[annotator]['elo_predictions'].append(row['last_occurrence'])
+                    individual_metrics[annotator]['elo_truths'].append(ground_truth[best_ground_truth_idx])
+
+    #calculate the classification f1
+    for annotator in individual_metrics:
+        individual_metrics[annotator]['pqf_classification_f1'] = f1_score(individual_metrics[annotator]['pqf_classification_truths'], individual_metrics[annotator]['pqf_classification_predictions'])
+        individual_metrics[annotator]['elo_classification_f1'] = f1_score(individual_metrics[annotator]['elo_classification_truths'], individual_metrics[annotator]['elo_classification_predictions'])
+        
+    return individual_metrics
+
+
+#--- Begin Script ---#
 
 #figure save path
 fig_save_dir = r'<PATH_TO_SAVE_DIR>'
@@ -265,6 +365,113 @@ for idx in ground_truth_quantities.index:
 ground_truth_quantities['all_answers'] = all_ans
 
 
+#go through the aggregate patients and calculate ensemble metrics
+ensemble_metrics = {'pqf_classification_predictions':[],
+                    'pqf_classification_truths':[],
+                    'elo_classification_predictions':[],
+                    'elo_classification_truths':[],
+                    'pqf_predictions':[],
+                    'pqf_truths':[],
+                    'pqf_sub_predictions':[],
+                    'elo_predictions':[],
+                    'elo_truths':[],
+                    'elo_sub_predictions':[]
+                   }
+for pat in all_agg_pats:
+
+    #get the ground truth for this index
+    ground_truth = ground_truth_quantities.loc[int(pat.pat_id.split("_")[0]), 'all_answers']
+
+    #check if it's a pqf question
+    if 'pqf' in pat.pat_id:
+
+        #for pqfs, check if the ground_truths exist, or if it is all < 0 (error codes while quantifying) and/or string (could not be quantified)
+        ground_truth_exists = np.any([pqf_exists(truth) for truth in ground_truth]) if isinstance(ground_truth, list) else not pd.isnull(ground_truth)
+
+        #append whether or not an answer exists to the classification truths
+        ensemble_metrics['pqf_classification_truths'].append(ground_truth_exists)
+
+        #was a prediction made?
+        prediction_exists = pqf_exists(pat.aggregate_visits[0].pqf)
+
+        #append whether or not a prediction was made
+        ensemble_metrics['pqf_classification_predictions'].append(prediction_exists)
+            
+        #if a prediction was made and the ground truth exists, store the best answer.
+        #store the lowest abs error if there are multiple ground_truths
+        if prediction_exists and ground_truth_exists:
+            ground_truth = [truth for truth in ground_truth if pqf_exists(truth)]
+            best_ground_truth_idx = np.argmin([np.abs(truth - pat.aggregate_visits[0].pqf) for truth in ground_truth])                  
+            ensemble_metrics['pqf_predictions'].append(pat.aggregate_visits[0].pqf)
+            ensemble_metrics['pqf_truths'].append(ground_truth[best_ground_truth_idx])
+            ensemble_metrics['pqf_sub_predictions'].append([vis.pqf for vis in pat.aggregate_visits[0].all_visits])
+
+    #otherwise it's an elo question
+    else:
+
+        #first, check if the ground truth exists
+        ground_truth_exists = np.any([elo_exists(truth) for truth in ground_truth]) if isinstance(ground_truth, list) else not pd.isnull(ground_truth)
+
+        #append whether or not an answer exists to the classification truths
+        ensemble_metrics['elo_classification_truths'].append(ground_truth_exists)
+
+        #was a prediction made?
+        prediction_exists = elo_exists(pat.aggregate_visits[0].elo)
+
+        #append whether or not a prediction was made
+        ensemble_metrics['elo_classification_predictions'].append(prediction_exists)
+
+
+        #if a prediction was made and the ground truth exists, store the best answer.
+        #store the lowest abs error if there are multiple ground_truths
+        if prediction_exists and ground_truth_exists:
+            #first, convert ground_truth to datetimes
+            ground_truth = [datetime.strptime(gt, '%B %d %Y') for gt in ground_truth]
+            best_ground_truth_idx = np.argmin([np.abs(truth - pat.aggregate_visits[0].elo) for truth in ground_truth])                  
+            ensemble_metrics['elo_predictions'].append(pat.aggregate_visits[0].elo)
+            ensemble_metrics['elo_truths'].append(ground_truth[best_ground_truth_idx])
+            ensemble_metrics['elo_sub_predictions'].append([vis.elo for vis in pat.aggregate_visits[0].all_visits])
+            
+
+#calculate the classification f1
+ensemble_metrics['pqf_classification_f1'] = f1_score(ensemble_metrics['pqf_classification_truths'], ensemble_metrics['pqf_classification_predictions'])
+ensemble_metrics['elo_classification_f1'] = f1_score(ensemble_metrics['elo_classification_truths'], ensemble_metrics['elo_classification_predictions'])
+
+#calculate metrics for annotators and models
+annotator_metrics = calculate_metrics_for_individuals(ground_truth_quantities, all_predictions_and_summaries_annotators)
+model_metrics = calculate_metrics_for_individuals(ground_truth_quantities, all_predictions_and_summaries_models)
+
+#create pingouin tables for metrics
+annotator_pgs = [dict_to_pingouin(annotator_metrics[anno]) for anno in annotator_metrics]
+model_pgs = [dict_to_pingouin(model_metrics[seed]) for seed in model_metrics]
+ensemble_pgs = dict_to_pingouin(ensemble_metrics)
+
+#calculate ICC for each
+#these print out division by zero warnings for annotator_pgs[5][0] and annotator_pgs[13][0] because the rater and ground truth are equivalent
+annotator_ICCs = [(pg.intraclass_corr(data=pg_tbl[0], targets='note_idx', raters='rater', ratings='pqf'), pg.intraclass_corr(data=pg_tbl[1], targets='note_idx', raters='rater', ratings='elo')) for pg_tbl in annotator_pgs]
+model_ICCs = [(pg.intraclass_corr(data=pg_tbl[0], targets='note_idx', raters='rater', ratings='pqf'), pg.intraclass_corr(data=pg_tbl[1], targets='note_idx', raters='rater', ratings='elo')) for pg_tbl in model_pgs]
+ensemble_ICCs = (pg.intraclass_corr(data=ensemble_pgs[0], targets='note_idx', raters='rater', ratings='pqf'), pg.intraclass_corr(data=ensemble_pgs[1], targets='note_idx', raters='rater', ratings='elo'))
+
+print("PQF Classification F1")
+print(f"Models: {[model_metrics[seed]['pqf_classification_f1'] for seed in model_metrics]}")
+print(f"Ensemble: {ensemble_metrics['pqf_classification_f1']}")
+print(f"Mean Annotator: {np.mean([annotator_metrics[anno]['pqf_classification_f1'] for anno in annotator_metrics])}")
+print("")
+print("PQF ICC(1)")
+print(f"Models: {[icc[0].iloc[0].ICC for icc in model_ICCs]}")
+print(f"Ensemble: {ensemble_ICCs[0].iloc[0].ICC}")
+print(f"Mean Annotator: {np.mean([icc[0].iloc[0].ICC for icc in annotator_ICCs])}")
+
+print("ELO Classification F1")
+print(f"Models: {[model_metrics[seed]['elo_classification_f1'] for seed in model_metrics]}")
+print(f"Ensemble: {ensemble_metrics['elo_classification_f1']}")
+print(f"Mean Annotator: {np.mean([annotator_metrics[anno]['elo_classification_f1'] for anno in annotator_metrics])}")
+print("")
+print("ELO ICC(1)")
+print(f"Models: {[icc[1].iloc[0].ICC for icc in model_ICCs]}")
+print(f"Ensemble: {ensemble_ICCs[1].iloc[0].ICC}")
+print(f"Mean Annotator: {np.mean([icc[1].iloc[0].ICC for icc in annotator_ICCs])}")
+
 #go through each annotator's quantities and calculate their accuracies
 annotator_accuracy = {}
 for annotator in all_predictions_and_summaries_annotators:
@@ -420,7 +627,7 @@ plt.xticks(ticks=x_pos[:-2] + [x_pos[-2] + sep, x_pos[-1] + sep],
            labels=['Model 1', 'Model 2', 'Model 3', 'Model 4 ', 'Model 5', 'Plurality Voting', 'Humans'],
            rotation = -45, ha='left')
 # plt.title("Plurality-Voted Seizure Frequency and Date of Last Seizure Extraction\nAccuracy Against Annotator Accuracy (95% Confidence Intervals)\n")
-plt.ylabel("Accuracy")
+plt.ylabel("Agreement")
 
 
 save_path=f'{fig_save_dir}/Fig_5b'
