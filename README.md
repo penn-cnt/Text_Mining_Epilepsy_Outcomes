@@ -1,6 +1,6 @@
 # Text_Mining_Epilepsy_Outcomes
 
-This code is for <insert_citation_here>. 
+This code is for Xie, Kevin et al. “Long term epilepsy outcome dynamics revealed by natural language processing of clinic notes.” Epilepsia, 10.1111/epi.17633. 28 Apr. 2023, doi:10.1111/epi.17633. 
 
 # Abbreviations found in documentation/code
 
